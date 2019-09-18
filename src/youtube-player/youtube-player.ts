@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright Google LLC All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -7,37 +15,38 @@ import {
   Input,
   NgZone,
   OnDestroy,
+  OnInit,
   Output,
   ViewChild,
-  OnInit,
+  ViewEncapsulation,
 } from '@angular/core';
 
 import {
   combineLatest,
-  of as observableOf,
-  Observable,
   ConnectableObservable,
-  pipe,
-  MonoTypeOperatorFunction,
   merge,
+  MonoTypeOperatorFunction,
+  Observable,
+  of as observableOf,
   OperatorFunction,
+  pipe,
   Subject,
 } from 'rxjs';
 
 import {
   combineLatest as combineLatestOp,
-  map,
-  scan,
-  withLatestFrom,
-  flatMap,
-  filter,
-  startWith,
-  publish,
-  first,
   distinctUntilChanged,
-  takeUntil,
-  take,
+  filter,
+  first,
+  flatMap,
+  map,
+  publish,
+  scan,
   skipWhile,
+  startWith,
+  take,
+  takeUntil,
+  withLatestFrom,
 } from 'rxjs/operators';
 
 declare global {
@@ -61,15 +70,23 @@ interface Player extends YT.Player {
 type UninitializedPlayer = Pick<Player, 'videoId' | 'destroy' | 'addEventListener'>;
 
 /**
+ * Whether we're currently rendering inside a browser. Equivalent of `Platform.isBrowser`,
+ * but copied over here so we don't have to add another dependency.
+ */
+const isBrowser = typeof window === 'object' && !!window;
+
+/**
  * Angular component that renders a YouTube player via the YouTube player
  * iframe API.
  * @see https://developers.google.com/youtube/iframe_api_reference
  */
 @Component({
+  moduleId: module.id,
   selector: 'youtube-player',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
   // This div is *replaced* by the YouTube player embed.
-  template: '<div #youtube_container></div>',
+  template: '<div #youtubeContainer></div>',
 })
 export class YouTubePlayer implements AfterViewInit, OnDestroy, OnInit {
   /** YouTube Video ID to view */
@@ -136,15 +153,21 @@ export class YouTubePlayer implements AfterViewInit, OnDestroy, OnInit {
   @Output() playbackRateChange = new EventEmitter<YT.OnPlaybackRateChangeEvent>();
 
   /** The element that will be replaced by the iframe. */
-  @ViewChild('youtube_container', {static: false}) youtubeContainer: ElementRef | undefined;
+  @ViewChild('youtubeContainer', {static: false})
+  youtubeContainer: ElementRef<HTMLElement>;
+
   private _youtubeContainer = new EventEmitter<HTMLElement>();
   private _destroyed = new EventEmitter<undefined>();
-
   private _player: Player | undefined;
 
   constructor(private _ngZone: NgZone) {}
 
   ngOnInit() {
+    // Don't do anything if we're not in a browser environment.
+    if (!isBrowser) {
+      return;
+    }
+
     let iframeApiAvailableObs: Observable<boolean> = observableOf(true);
     if (!window.YT) {
       if (this.showBeforeIframeApiLoads) {
@@ -212,19 +235,15 @@ export class YouTubePlayer implements AfterViewInit, OnDestroy, OnInit {
   }
 
   ngAfterViewInit() {
-    if (!this.youtubeContainer) {
-      return;
-    }
     this._youtubeContainer.emit(this.youtubeContainer.nativeElement);
   }
 
   ngOnDestroy() {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.destroy();
+      window.onYouTubeIframeAPIReady = undefined;
+      this._destroyed.emit();
     }
-    this._player.destroy();
-    window.onYouTubeIframeAPIReady = undefined;
-    this._destroyed.emit();
   }
 
   private _runInZone<T extends (...args: any[]) => void>(callback: T):
@@ -238,166 +257,122 @@ export class YouTubePlayer implements AfterViewInit, OnDestroy, OnInit {
 
   /** See https://developers.google.com/youtube/iframe_api_reference#playVideo */
   playVideo() {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.playVideo();
     }
-    this._player.playVideo();
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#pauseVideo */
   pauseVideo() {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.pauseVideo();
     }
-    this._player.pauseVideo();
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#stopVideo */
   stopVideo() {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.stopVideo();
     }
-    this._player.stopVideo();
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#seekTo */
   seekTo(seconds: number, allowSeekAhead: boolean) {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.seekTo(seconds, allowSeekAhead);
     }
-    this._player.seekTo(seconds, allowSeekAhead);
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#mute */
   mute() {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.mute();
     }
-    this._player.mute();
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#unMute */
   unMute() {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.unMute();
     }
-    this._player.unMute();
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#isMuted */
   isMuted(): boolean {
-    if (!this._player) {
-      return false;
-    }
-    return this._player.isMuted();
+    return !this._player || this._player.isMuted();
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#setVolume */
   setVolume(volume: number) {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      this._player.setVolume(volume);
     }
-    this._player.setVolume(volume);
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getVolume */
   getVolume(): number {
-    if (!this._player) {
-      return 0;
-    }
-    return this._player.getVolume();
+    return this._player ? this._player.getVolume() : 0;
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#setPlaybackRate */
   setPlaybackRate(playbackRate: number) {
-    if (!this._player) {
-      return;
+    if (this._player) {
+      return this._player.setPlaybackRate(playbackRate);
     }
-    return this._player.setPlaybackRate(playbackRate);
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getPlaybackRate */
   getPlaybackRate(): number {
-    if (!this._player) {
-      return 0;
-    }
-    return this._player.getPlaybackRate();
+    return this._player ? this._player.getPlaybackRate() : 0;
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getAvailablePlaybackRates */
   getAvailablePlaybackRates(): number[] {
-    if (!this._player) {
-      return [];
-    }
-    return this._player.getAvailablePlaybackRates();
+    return this._player ? this._player.getAvailablePlaybackRates() : [];
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getVideoLoadedFraction */
   getVideoLoadedFraction(): number {
-    if (!this._player) {
-      return 0;
-    }
-    return this._player.getVideoLoadedFraction();
+    return this._player ? this._player.getVideoLoadedFraction() : 0;
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getPlayerState */
   getPlayerState(): YT.PlayerState | undefined {
-    if (!window.YT) {
+    if (!isBrowser || !window.YT) {
       return undefined;
     }
 
-    if (!this._player) {
-      return YT.PlayerState.UNSTARTED;
-    }
-    return this._player.getPlayerState();
+    return this._player ? this._player.getPlayerState() : YT.PlayerState.UNSTARTED;
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getCurrentTime */
   getCurrentTime(): number {
-    if (!this._player) {
-      return 0;
-    }
-    return this._player.getCurrentTime();
+    return this._player ? this._player.getCurrentTime() : 0;
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getPlaybackQuality */
   getPlaybackQuality(): YT.SuggestedVideoQuality {
-    if (!this._player) {
-      return 'default';
-    }
-    return this._player.getPlaybackQuality();
+    return this._player ? this._player.getPlaybackQuality() : 'default';
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getAvailableQualityLevels */
   getAvailableQualityLevels(): YT.SuggestedVideoQuality[] {
-    if (!this._player) {
-      return [];
-    }
-    return this._player.getAvailableQualityLevels();
+    return this._player ? this._player.getAvailableQualityLevels() : [];
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getDuration */
   getDuration(): number {
-    if (!this._player) {
-      return 0;
-    }
-    return this._player.getDuration();
+    return this._player ? this._player.getDuration() : 0;
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getVideoUrl */
   getVideoUrl(): string {
-    if (!this._player) {
-      return '';
-    }
-    return this._player.getVideoUrl();
+    return this._player ? this._player.getVideoUrl() : '';
   }
 
   /** See https://developers.google.com/youtube/iframe_api_reference#getVideoEmbedCode */
   getVideoEmbedCode(): string {
-    if (!this._player) {
-      return '';
-    }
-    return this._player.getVideoEmbedCode();
+    return this._player ? this._player.getVideoEmbedCode() : '';
   }
 }
 
